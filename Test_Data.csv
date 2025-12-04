@@ -1,0 +1,21 @@
+po_number,vendor_name,amount,line_item_description,expected_delivery_date,created_date,status
+PO-2024-890,DEMO Sliced Invoices,85.00,Web Design Services,2016-01-31,2016-01-20,OPEN
+PO-2024-891,Acme Corporation,2500.00,Software License,2025-02-28,2025-01-15,OPEN
+PO-2024-892,Tech Supply Inc,10000.00,Server Hardware,2025-03-15,2025-01-10,OPEN
+PO-2024-893,Office Solutions,500.00,Office Supplies,2025-01-30,2025-01-10,OPEN
+PO-2024-894,Cloud Services Ltd,1200.00,Annual Cloud Storage,2025-02-15,2025-01-15,OPEN
+PO-2024-895,Marketing Agency,6000.00,Marketing Campaign,2025-03-01,2025-02-01,OPEN
+PO-2024-896,Legal Services,3500.00,Legal Consultation,2025-02-28,2025-02-01,OPEN
+PO-2024-897,IT Consulting,9000.00,System Integration,2025-03-20,2025-02-15,OPEN
+PO-2024-898,Travel & Transport,2000.00,International Shipping,2025-02-20,2025-02-01,OPEN
+PO-2024-899,Software Vendor,4500.00,Enterprise License,2025-03-10,2025-02-10,OPEN
+PO-2024-900,DEMO Sliced Invoices,100.00,Additional Design Work,2025-02-28,2025-02-10,OPEN
+PO-2024-901,Hardware Supplier,15500.00,Server Upgrade,2025-04-10,2025-03-10,OPEN
+PO-2024-902,Consulting Services,8000.00,Business Strategy,2025-03-25,2025-02-25,OPEN
+PO-2024-903,Acme Corporation,3000.00,Extended Support,2025-03-15,2025-02-20,OPEN
+PO-2024-904,Cloud Services Ltd,1500.00,Premium Support,2025-02-28,2025-02-01,OPEN
+PO-2024-905,Marketing Agency,5500.00,Social Media Campaign,2025-03-05,2025-02-05,OPEN
+PO-2024-906,Tech Supply Inc,9500.00,Network Equipment,2025-03-20,2025-02-20,OPEN
+PO-2024-907,Office Solutions,700.00,Furniture & Fixtures,2025-02-15,2025-02-01,OPEN
+PO-2024-908,Legal Services,4000.00,Contract Review,2025-03-01,2025-02-15,OPEN
+PO-2024-909,IT Consulting,10000.00,Full System Audit,2025-03-30,2025-03-01,OPEN

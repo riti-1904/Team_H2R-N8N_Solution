@@ -1,0 +1,845 @@
+{
+  "name": "InvoiceProcessing",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            },
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {},
+        "options": {
+          "dataPropertyAttachmentsPrefixName": "attachment_",
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -80,
+        -208
+      ],
+      "id": "6652f03c-1345-4a3c-b895-d91a32147104",
+      "name": "Gmail Trigger",
+      "alwaysOutputData": false,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "eU4PUeWMRW2hYSTt",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the extracted PDF text\n// const pdfData = $input.first().json[0];\nconst text = $input.first().json.text\n\nconsole.log(\"Processing PDF text...\");\n\n// Define regex patterns for invoice fields\nconst patterns = {\n  invoiceNumber: /Invoice\\s*Number\\s*([A-Za-z0-9\\-]+)/i,\n  orderNumber: /Order\\s*Number\\s*([A-Za-z0-9\\-]+)/i,\n  invoiceDate: /Invoice\\s*Date\\s*([A-Za-z]+\\s*\\d{1,2},?\\s*\\d{4})/i,\n  dueDate: /Due\\s*Date\\s*([A-Za-z]+\\s*\\d{1,2},?\\s*\\d{4})/i,\n  totalDue: /Total\\s*Due\\s*\\$?([\\d,]+\\.?\\d{0,2})/i,\n  tax: /Tax\\s*\\$?([\\d,]+\\.?\\d{0,2})/i,\n  subTotal: /Sub\\s*Total\\s*\\$?([\\d,]+\\.?\\d{0,2})/i,\n  \n  // Vendor info\n  vendorName: /From:\\s*\\n([^\\n]+)/i,\n  vendorEmail: /admin@([a-zA-Z0-9\\-]+\\.[a-zA-Z]+)/i,\n  \n  // Customer info\n  customerName: /To:\\s*\\n([^\\n]+)/i,\n  customerEmail: /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})/,\n};\n\n// Extract all fields\nconst extracted = {};\nconst confidence = {};\n\nfor (const [field, pattern] of Object.entries(patterns)) {\n  const match = text.match(pattern);\n  if (match) {\n    extracted[field] = match[1].trim();\n    confidence[field] = 0.95; // High confidence for regex\n  } else {\n    extracted[field] = null;\n    confidence[field] = 0;\n  }\n}\n\n// Extract line items (more complex)\nconst lineItemPattern = /(\\d+\\.\\d+)\\s+(.+?)\\s+\\$?([\\d,]+\\.\\d{2})\\s+[\\d.%]+\\s+\\$?([\\d,]+\\.\\d{2})/g;\nconst lineItems = [];\nlet match;\n\nwhile ((match = lineItemPattern.exec(text)) !== null) {\n  lineItems.push({\n    quantity: parseFloat(match[1]),\n    description: match[2].trim(),\n    rate: parseFloat(match[3].replace(/,/g, '')),\n    amount: parseFloat(match[4].replace(/,/g, ''))\n  });\n}\n\n// Parse dates to proper format\nconst parseDate = (dateStr) => {\n  if (!dateStr) return null;\n  try {\n    return new Date(dateStr).toISOString().split('T')[0];\n  } catch (e) {\n    return dateStr;\n  }\n};\n\nreturn {\n  extraction_status: \"SUCCESS\",\n  extracted_fields: {\n    invoice_number: extracted.invoiceNumber,\n    order_number: extracted.orderNumber,\n    invoice_date: parseDate(extracted.invoiceDate),\n    due_date: parseDate(extracted.dueDate),\n    \n    // Financial\n    amount: extracted.totalDue ? parseFloat(extracted.totalDue.replace(/,/g, '')) : null,\n    tax: extracted.tax ? parseFloat(extracted.tax.replace(/,/g, '')) : null,\n    sub_total: extracted.subTotal ? parseFloat(extracted.subTotal.replace(/,/g, '')) : null,\n    \n    // Vendor\n    vendor_name: extracted.vendorName,\n    vendor_email: extracted.vendorEmail ? `admin@${extracted.vendorEmail}` : null,\n    \n    // Customer\n    customer_name: extracted.customerName,\n    customer_email: extracted.customerEmail,\n    \n    // Line items\n    line_items: lineItems,\n    line_item_count: lineItems.length\n  },\n  \n  confidence_scores: confidence,\n  \n  raw_text_sample: text.substring(0, 300)\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -208
+      ],
+      "id": "3da2c642-4d40-4c75-86a8-254cbd555f6b",
+      "name": "Raw to Json"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "={{ $('Gmail Trigger').item.binary.attachment_0 }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        -208
+      ],
+      "id": "3b208582-7b4f-4bcf-9a6e-73ce790bbb1b",
+      "name": "Binary to text"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1pm_duD6-jZYzv6g8PkfKiwxL42zigYp1YCOIJHEQ3Y0",
+          "mode": "list",
+          "cachedResultName": "Invoice_Processing_Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1pm_duD6-jZYzv6g8PkfKiwxL42zigYp1YCOIJHEQ3Y0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "PurchaseOrders",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1pm_duD6-jZYzv6g8PkfKiwxL42zigYp1YCOIJHEQ3Y0/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        608,
+        -16
+      ],
+      "id": "0d188f92-c457-4ab2-bf3c-d0903d3c554f",
+      "name": "PO sample data",
+      "executeOnce": false,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "x9RU52tisbmRLgDr",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an invoice validator. Validate this invoice against the PO.\n\nINVOICE:\nNumber: {{ $('Raw to Json').item.json.extracted_fields.invoice_number }}\nVendor: {{ $('Raw to Json').item.json.extracted_fields.vendor_name }}\nAmount: {{ $('Raw to Json').item.json.extracted_fields.amount }}\nDate: {{ $('Raw to Json').item.json.extracted_fields.due_date }}\n\nPO:\nNumber: {{ $json.po_number }}\nVendor: {{ $json.vendor_name }}\nAmount: {{ $json.amount }}\nDate: {{ $json.expected_delivery_date }}\n\nCheck:\n1. Vendor match: \n2. Amount match: invoice vs PO (allow 15% variance)\n3. Date valid: invoice within 60 days of PO\n4. Any fraud signals?\n\nOutput JSON with:\n- overall_status: APPROVED/REVIEW/REJECTED\n- risk_score: 0-100\n- reason: brief explanation",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        880,
+        -16
+      ],
+      "id": "66358df6-3afb-4875-a8a4-e438f92f108b",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        720,
+        272
+      ],
+      "id": "318d9e3b-8205-4531-ad6b-5581cf25524b",
+      "name": "OpenAI Chat Model",
+      "notesInFlow": false,
+      "credentials": {
+        "openAiApi": {
+          "id": "hCnRawxzFLq7MKOm",
+          "name": "n8n free OpenAI API credits"
+        }
+      },
+      "notes": "You are an invoice validation expert. Analyze the provided invoice and purchase order data.\n\nINVOICE DATA:\n- Invoice Number: {{$json.extracted_fields.invoice_number}}\n- Vendor: {{$json.extracted_fields.vendor_name}}\n- Amount: ${{$json.extracted_fields.amount}}\n- Invoice Date: {{$json.extracted_fields.invoice_date}}\n- Due Date: {{$json.extracted_fields.due_date}}\n- Tax: ${{$json.extracted_fields.tax}}\n- Customer: {{$json.extracted_fields.customer_name}}\n\nMATCHED PO DATA:\n- PO Number: {{$json.vendor_matching.best_match.po_number}}\n- PO Vendor: {{$json.vendor_matching.best_match.po_vendor}}\n- PO Amount: ${{$json.vendor_matching.best_match.po_amount}}\n- PO Delivery Date: {{$json.vendor_matching.best_match.po_delivery_date}}\n- Vendor Match Confidence: {{$json.vendor_matching.confidence}}\n\nVALIDATION TASKS:\n1. Check if vendor name matches PO (confidence already calculated: {{$json.vendor_matching.confidence}})\n2. Compare invoice amount (${{$json.extracted_fields.amount}}) with PO amount (${{$json.vendor_matching.best_match.po_amount}})\n   - Allow variance up to 15% (for taxes, shipping, discounts)\n   - Flag if variance exceeds 15%\n3. Check invoice date ({{$json.extracted_fields.invoice_date}}) vs PO delivery date ({{$json.vendor_matching.best_match.po_delivery_date}})\n   - Should be within -30 to +60 days\n   - Flag if outside range\n4. Check for suspicious patterns:\n   - Unusual vendor\n   - Round number amounts (potential fraud)\n   - Missing line item details\n   - Unusual payment terms\n\nPROVIDE OUTPUT AS JSON:\n{\n  \"validation_summary\": {\n    \"vendor_validation\": \"PASS/FAIL\",\n    \"amount_validation\": \"PASS/FAIL\",\n    \"date_validation\": \"PASS/FAIL\",\n    \"overall_status\": \"APPROVED/REQUIRES_REVIEW/REJECTED\",\n    \"risk_score\": 0-100,\n    \"confidence\": \"HIGH/MEDIUM/LOW\"\n  },\n  \"amount_analysis\": {\n    \"variance_percent\": XX,\n    \"variance_acceptable\": true/false,\n    \"reason\": \"explanation\"\n  },\n  \"date_analysis\": {\n    \"days_difference\": XX,\n    \"date_valid\": true/false,\n    \"reason\": \"explanation\"\n  },\n  \"risk_factors\": [\n    \"factor 1\",\n    \"factor 2\"\n  ],\n  \"recommendation\": \"Proceed to approval / Manual review needed / ESCALATE\",\n  \"ai_confidence\": \"95%\"\n}"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all AI responses\nconst allInputs = $input.all();\n\nconsole.log(\"Total AI responses:\", allInputs.length);\n\n// Parse all AI outputs\nconst validationResults = allInputs\n  .map((input, index) => {\n    try {\n      const output = input.json.output;\n      console.log(`Response ${index}:`, output);\n      \n      // Extract JSON from the output (it's wrapped in markdown)\n      const jsonMatch = output.match(/\\{[\\s\\S]*\\}/);\n      \n      if (jsonMatch) {\n        const parsed = JSON.parse(jsonMatch[0]);\n        return {\n          index,\n          ...parsed,\n          parsed: true\n        };\n      } else {\n        return {\n          index,\n          error: \"Could not parse JSON\",\n          parsed: false\n        };\n      }\n    } catch (e) {\n      return {\n        index,\n        error: \"Error: \" + e.message,\n        parsed: false\n      };\n    }\n  })\n  .filter(r => r.parsed); // Only keep parsed results\n\nconsole.log(\"Parsed results:\", validationResults.length);\n\nif (validationResults.length === 0) {\n  return {\n    error: \"Could not parse any AI responses\",\n    raw_responses: allInputs.map(i => i.json.output)\n  };\n}\n\n// Find BEST validation (lowest risk or APPROVED status)\nconst bestValidation = validationResults.sort((a, b) => {\n  // First, prefer APPROVED over others\n  if (a.overall_status === \"APPROVED\" && b.overall_status !== \"APPROVED\") return -1;\n  if (b.overall_status === \"APPROVED\" && a.overall_status !== \"APPROVED\") return 1;\n  \n  // Then, sort by risk score (lowest first)\n  return (a.risk_score || 100) - (b.risk_score || 100);\n})[0];\n\nconsole.log(\"Best validation:\", bestValidation);\n\n// ========== DECISION LOGIC ==========\n\nlet approvalStatus = \"PENDING\";\nlet nextAction = \"MANUAL_REVIEW\";\nconst riskScore = bestValidation.risk_score || 0;\n\nif (bestValidation.overall_status === \"APPROVED\" && riskScore < 20) {\n  approvalStatus = \"AUTO_APPROVED\";\n  nextAction = \"STORE_AND_PROCESS\";\n} else if (bestValidation.overall_status === \"REVIEW\" || (riskScore >= 20 && riskScore < 50)) {\n  approvalStatus = \"REQUIRES_REVIEW\";\n  nextAction = \"SEND_FOR_MANAGER_APPROVAL\";\n} else if (bestValidation.overall_status === \"REJECTED\" || riskScore >= 50) {\n  approvalStatus = \"REJECTED\";\n  nextAction = \"ESCALATE_AND_ALERT\";\n}\n\nreturn {\n  ai_validation: {\n    overall_status: bestValidation.overall_status,\n    risk_score: riskScore,\n    reason: bestValidation.reason,\n    ai_confidence: bestValidation.ai_confidence || \"MEDIUM\"\n  },\n  \n  validation_decision: {\n    approval_status: approvalStatus,\n    next_action: nextAction,\n    recommendation: bestValidation.reason\n  },\n  \n  processing_info: {\n    total_po_validations: validationResults.length,\n    best_match_index: bestValidation.index,\n    all_results: validationResults.map(r => ({\n      po_index: r.index,\n      status: r.overall_status,\n      risk: r.risk_score\n    }))\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        -16
+      ],
+      "id": "afb17c66-ea33-455b-82d6-96cba2b63c74",
+      "name": "Parse & Filter AI Validation"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get current invoice and validation\nconst validation = $input.first().json;\n\n// Get all inputs to find invoice data\nconst allInputs = $input.all();\nlet invoiceData = {};\n\nallInputs.forEach(input => {\n  if (input.json.extracted_fields?.amount) {\n    invoiceData = input.json.extracted_fields;\n  }\n});\n\nconsole.log(\"Checking duplicate for:\", invoiceData.invoice_number);\n\n// Create hash for duplicate detection\nconst crypto = require('crypto');\nconst hashString = `${invoiceData.vendor_name}|${invoiceData.amount}|${invoiceData.invoice_date}|${invoiceData.invoice_number}`;\nconst invoiceHash = crypto.createHash('sha256').update(hashString).digest('hex').substring(0, 16);\n\nconsole.log(\"Invoice hash:\", invoiceHash);\n\n// For now, assume no duplicates (will check against ProcessedInvoices sheet next)\n// In production, you'd query Google Sheets ProcessedInvoices table here\n\nreturn {\n  duplicate_check: {\n    invoice_hash: invoiceHash,\n    invoice_number: invoiceData.invoice_number,\n    vendor: invoiceData.vendor_name,\n    amount: invoiceData.amount,\n    date: invoiceData.invoice_date,\n    \n    is_duplicate: false, // Will be updated after checking sheet\n    status: \"UNIQUE\",\n    risk_score_impact: 0\n  },\n  \n  // Pass forward all validation data\n  ai_validation: validation.ai_validation,\n  validation_decision: validation.validation_decision,\n  extracted_fields: invoiceData\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -192
+      ],
+      "id": "99c5b1ce-3241-4c6f-a69f-5495b0026ab6",
+      "name": "Check for Duplicates"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1pm_duD6-jZYzv6g8PkfKiwxL42zigYp1YCOIJHEQ3Y0",
+          "mode": "list",
+          "cachedResultName": "Invoice_Processing_Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1pm_duD6-jZYzv6g8PkfKiwxL42zigYp1YCOIJHEQ3Y0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 43730038,
+          "mode": "list",
+          "cachedResultName": "ProcessedInvoices",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1pm_duD6-jZYzv6g8PkfKiwxL42zigYp1YCOIJHEQ3Y0/edit#gid=43730038"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "invoice_id": "={{ $json.invoice_record.invoice_id }}",
+            "invoice_number": "={{ $json.invoice_record.invoice_number }}",
+            "vendor_name": "={{ $json.invoice_record.vendor_name }}",
+            "vendor_email": "={{ $json.invoice_record.vendor_email }}",
+            "amount": "={{ $json.invoice_record.amount }}",
+            "tax": "={{ $json.invoice_record.tax }}",
+            "invoice_date": "={{ $json.invoice_record.invoice_date }}",
+            "due_date": "={{ $json.invoice_record.due_date }}",
+            "po_number": "={{ $json.invoice_record.invoice_id }}",
+            "processing_status": "={{ $json.invoice_record.validation_status }}",
+            "risk_score": "={{ $json.invoice_record.risk_score }}",
+            "validation_passed": "={{ $json.invoice_record.approval_status }}",
+            "approval_status": "={{ $json.invoice_record.ai_confidence }}",
+            "created_at": "={{ $json.invoice_record.ai_confidence }}",
+            "processed_at": "={{ $json.invoice_record.duplicate_status }}",
+            "notes": "={{ $json.invoice_record.processed_time }}",
+            "invoice_record": "={{ $json.invoice_record.processed_date }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "invoice_id",
+              "displayName": "invoice_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invoice_number",
+              "displayName": "invoice_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "vendor_name",
+              "displayName": "vendor_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "vendor_email",
+              "displayName": "vendor_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tax",
+              "displayName": "tax",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invoice_date",
+              "displayName": "invoice_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "due_date",
+              "displayName": "due_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "po_number",
+              "displayName": "po_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "risk_score",
+              "displayName": "risk_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "validation_passed",
+              "displayName": "validation_passed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approval_status",
+              "displayName": "approval_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invoice_record",
+              "displayName": "invoice_record",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2400,
+        -400
+      ],
+      "id": "0b88c70c-1456-4876-b71d-8afa7812d3c2",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "x9RU52tisbmRLgDr",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1504,
+        -192
+      ],
+      "id": "b487bb3b-a6e9-4bfc-91d0-2233e4571350",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Get data from input\nconst extracted = input.extracted_fields;\nconst duplicate = input.duplicate_check;\nconst aiValidation = input.ai_validation || {};\nconst validation = input.validation_decision || {};\n\n// Create detailed record\nconst invoiceRecord = {\n  // Identifiers\n  invoice_id: duplicate.invoice_hash,\n  invoice_number: extracted.invoice_number,\n  order_number: extracted.order_number,\n  \n  // Vendor Information\n  vendor_name: extracted.vendor_name,\n  vendor_email: extracted.vendor_email,\n  \n  // Financial Details\n  amount: extracted.amount,\n  tax: extracted.tax,\n  sub_total: extracted.sub_total,\n  \n  // Dates\n  invoice_date: extracted.invoice_date,\n  due_date: extracted.due_date,\n  \n  // Customer Information\n  customer_name: extracted.customer_name,\n  customer_email: extracted.customer_email,\n  \n  // Line Items\n  line_item_count: extracted.line_item_count || 0,\n  \n  // Validation & AI Results\n  validation_status: aiValidation.overall_status || \"PENDING\",\n  risk_score: aiValidation.risk_score || 0,\n  ai_reason: aiValidation.reason || \"\",\n  ai_confidence: aiValidation.ai_confidence || \"LOW\",\n  \n  // Approval Status\n  approval_status: validation.approval_status || \"PENDING\",\n  next_action: validation.next_action || \"REVIEW\",\n  \n  // Duplicate Check\n  is_duplicate: duplicate.is_duplicate || false,\n  duplicate_status: duplicate.status || \"UNKNOWN\",\n  \n  // Processing Info\n  processed_date: new Date().toISOString().split('T')[0],\n  processed_time: new Date().toISOString(),\n  \n  // Summary\n  total_amount_with_tax: (extracted.amount + extracted.tax).toFixed(2)\n};\n\nconsole.log(\"Invoice record prepared:\", {\n  invoice: invoiceRecord.invoice_number,\n  vendor: invoiceRecord.vendor_name,\n  amount: invoiceRecord.amount,\n  customer: invoiceRecord.customer_name,\n  status: invoiceRecord.approval_status\n});\n\nreturn {\n  invoice_record: invoiceRecord\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        -400
+      ],
+      "id": "16e0b5af-5f3c-4a05-aaa9-85667c3263bf",
+      "name": "Prepare Invoice Record"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.processing_status }}",
+                    "rightValue": "APPROVE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "02059812-312b-4eb6-91ff-7c7a93010625"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "APPROVE"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ae24a13a-0e9c-489e-848e-2bc2731804f5",
+                    "leftValue": "={{ $json.processing_status }}",
+                    "rightValue": "PENDING",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PENDING"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2cf4fea2-e760-4ebf-a3db-ca8da0fec524",
+                    "leftValue": "={{ $json.processing_status }}",
+                    "rightValue": "REJECTED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "REJECTED"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "927c3e84-41a3-45c7-b140-361799aaf292",
+                    "leftValue": "={{ $('Check for Duplicates').item.json.duplicate_check.status }}",
+                    "rightValue": "UNIQUE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        2848,
+        -208
+      ],
+      "id": "13920913-8600-4c85-8be6-37e43206facf",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.vendor_email }}",
+        "subject": "=Invoice  {{ $json.invoice_number }}- AUTO APPROVED",
+        "message": "=Dear {{ $json.vendor_name }},\n\nYour invoice has been automatically approved.\n\n📋 INVOICE DETAILS:\n• Invoice Number: {{ $json.invoice_number }}\n• Amount: {{ $json.amount }}\n• Invoice Date: {{ $json.invoice_date }}\n• Due Date: {{ $json.due_date }}\n\n✅ Status: APPROVED\n\n\n💰 Payment will be processed within 3-5 business days.\n\nThank you for your business!\n\nBest regards,\nFinance Team",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        3328,
+        -528
+      ],
+      "id": "1258652f-31b7-4185-afbf-79a0a94806bd",
+      "name": "Send APPROVAL message",
+      "webhookId": "fa49a3c7-a800-4f0f-ad4d-40c20383d659",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "eU4PUeWMRW2hYSTt",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "=harshgaikwadofficial@gmail.com",
+        "subject": "=Invoice {{ $json.invoice_id }} Requires Your Review",
+        "message": "=Please review and APPROVE or REJECT this invoice by {{ $json.due_date }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        3328,
+        -272
+      ],
+      "id": "ca14bbc6-f300-42c2-87dc-fce1565371c6",
+      "name": "Send REVIEW message",
+      "webhookId": "b601a75b-80af-486d-9384-7d4a9dada7cb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "eU4PUeWMRW2hYSTt",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "harshgaikwadofficial@gmail.com",
+        "subject": "= ESCALATION - Invoice {{ $json.invoice_id }} REJECTED",
+        "message": "CRITICAL - ESCALATION REQUIRED\n⚡ IMMEDIATE ACTION REQUIRED:\nPlease investigate this invoice immediately for potential fraud or discrepancies.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        3328,
+        -32
+      ],
+      "id": "ac96d406-5a24-479d-9f60-389a611154f3",
+      "name": "Send REJECTED message",
+      "webhookId": "4099e1d4-c036-4997-a998-63e3f71ae7d9",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "eU4PUeWMRW2hYSTt",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "948b50d5-827b-4287-a448-3d22d8505d4b",
+              "leftValue": "={{ $json.duplicate_check.status }}",
+              "rightValue": "=UNIQUE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1856,
+        -192
+      ],
+      "id": "a0075601-86e7-4133-b4a3-b30e0a985186",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "harshgaikwadofficial@gmail.com",
+        "subject": "=Duplicates Invoice Found  {{ $('Check for Duplicates').item.json.duplicate_check.invoice_number }}",
+        "message": "={{ $('Check for Duplicates').item.json.duplicate_check.invoice_number }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        3328,
+        208
+      ],
+      "id": "e579e9f6-b853-42e3-ac29-5c8655caafb0",
+      "name": "Send Duplicate message",
+      "webhookId": "5c868ecc-8ba6-4b3c-a219-e4a6ceecafa8",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "eU4PUeWMRW2hYSTt",
+          "name": "Gmail account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Binary to text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Raw to Json": {
+      "main": [
+        [
+          {
+            "node": "PO sample data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Binary to text": {
+      "main": [
+        [
+          {
+            "node": "Raw to Json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PO sample data": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse & Filter AI Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Filter AI Validation": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Check for Duplicates": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Check for Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Invoice Record": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send APPROVAL message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send REVIEW message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send REJECTED message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Duplicate message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send APPROVAL message": {
+      "main": [
+        []
+      ]
+    },
+    "Send REVIEW message": {
+      "main": [
+        []
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Prepare Invoice Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8da426f8-7849-4c48-94e3-9498c69af000",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cb60c6a5ee762c972c8d7414c44d22d9139bb701638c041ba7b7bd0d0f0aa867"
+  },
+  "id": "KEwDSiCLEy8vh8hL",
+  "tags": []
+}
